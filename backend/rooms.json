@@ -1,0 +1,8 @@
+[
+ {"id":"lab101","name":"ECE Lab 101","dept":"Electronics","x":20,"y":20,"w":210,"h":150},
+ {"id":"lab102","name":"CS Lab 102","dept":"Computer Sci","x":240,"y":20,"w":160,"h":150},
+ {"id":"cls201","name":"Classroom 201","dept":"Mechanical","x":410,"y":20,"w":170,"h":150},
+ {"id":"cls202","name":"Classroom 202","dept":"Civil","x":20,"y":180,"w":170,"h":140},
+ {"id":"sem1","name":"Seminar Hall","dept":"Computer Sci","x":200,"y":180,"w":230,"h":140},
+ {"id":"lab103","name":"Physics Lab","dept":"Electronics","x":440,"y":180,"w":140,"h":140}
+]

@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Campus Energy Ghost Hunter</title>
+<style>
+:root{--bg:#0d1117;--panel:#151b23;--line:#222b36;--tx:#e6edf3;--mut:#7d8b99;--ok:#4ade80;--idle:#fbbf24;--bad:#f87171;--off:#2a3441}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.4 system-ui,Segoe UI,Roboto,sans-serif;display:flex;min-height:100vh}
+nav{width:64px;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;align-items:center;gap:18px;padding:16px 0}
+nav b{font-size:13px;letter-spacing:.5px}nav i{width:34px;height:34px;border-radius:9px;background:var(--off);display:block}nav i.on{background:#243a2f;outline:1px solid var(--ok)}
+main{flex:1;padding:16px;display:grid;gap:14px;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);align-content:start}
+.p{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;min-width:0}
+h2{margin:0 0 10px;font-size:15px;font-weight:600;display:flex;justify-content:space-between;align-items:center}
+h2 small{color:var(--mut);font-weight:400;font-size:12px}
+.col{display:grid;gap:14px;align-content:start}.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.tile{background:#10161d;border:1px solid var(--line);border-radius:10px;padding:10px}.tile span{color:var(--mut);font-size:12px}.tile b{display:block;font-size:22px;margin-top:2px}
+svg{width:100%;display:block}text{fill:var(--mut);font-size:11px}.rn{fill:var(--tx);font-size:12px;font-weight:600}
+.room{stroke:#3a4757;stroke-width:1.5;cursor:pointer}.room.sel{stroke:#fff;stroke-width:2.5}
+.tabs{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+.tab{background:#10161d;border:1px solid var(--line);color:var(--tx);border-radius:20px;padding:4px 12px;cursor:pointer;font:inherit;display:flex;gap:6px;align-items:center}
+.tab.sel{border-color:var(--ok)}.dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+.legend{display:flex;gap:14px;color:var(--mut);font-size:12px;margin-top:6px;flex-wrap:wrap}
+.row2{display:grid;grid-template-columns:150px 1fr;gap:12px;align-items:center}
+ul{list-style:none;margin:0;padding:0;max-height:210px;overflow:auto}li{padding:7px 0;border-top:1px solid var(--line);font-size:13px}li:first-child{border:0}li time{color:var(--mut);font-size:11px;display:block}
+.lb{display:grid;grid-template-columns:22px 1fr 54px 70px;gap:8px;align-items:center;padding:7px 0;border-top:1px solid var(--line)}
+.lb:first-of-type{border:0}.bar{height:6px;border-radius:3px;background:var(--off);grid-column:2/5;overflow:hidden}.bar i{display:block;height:100%;background:var(--ok)}
+.pill{font-size:11px;padding:2px 8px;border-radius:10px;border:1px solid var(--line);color:var(--mut)}
+@media(max-width:900px){main{grid-template-columns:1fr}.tiles{grid-template-columns:repeat(2,1fr)}nav{display:none}}
+@media(prefers-reduced-motion:no-preference){.room{transition:fill .4s}}
+:focus-visible{outline:2px solid var(--ok);outline-offset:2px}
+</style></head><body>
+<nav><b>BMS</b><i class="on"></i><i></i><i></i><i></i></nav>
+<main>
+ <div class="col">
+  <section class="p"><h2>Campus floor plan <small id="mode"></small></h2>
+   <svg id="plan" viewBox="0 0 600 340" role="img" aria-label="Floor plan with room status"></svg>
+   <div class="legend"><span><i class="dot" style="background:var(--ok)"></i> Occupied</span><span><i class="dot" style="background:var(--idle)"></i> Empty, equipment off or within grace period</span><span><i class="dot" style="background:var(--bad)"></i> Ghost load</span><span><i class="dot" style="background:var(--off)"></i> Offline / idle</span></div>
+  </section>
+  <section class="tiles">
+   <div class="tile"><span>Live load</span><b id="tLoad">0 W</b></div>
+   <div class="tile"><span>Ghost rooms</span><b id="tGhost">0</b></div>
+   <div class="tile"><span>Energy wasted</span><b id="tWaste">0 Wh</b></div>
+   <div class="tile"><span>Devices online</span><b id="tOnline">0</b></div>
+  </section>
+  <section class="p"><h2>Ghost alerts <small>newest first</small></h2><ul id="alerts"></ul></section>
+ </div>
+ <div class="col">
+  <section class="p"><h2>Room occupancy &amp; current <small>PIR + ACS712 sensor data</small></h2>
+   <div class="tabs" id="tabs"></div>
+   <svg id="bars" viewBox="0 0 520 130"></svg>
+   <div class="legend"><span><i class="dot" style="background:var(--ok)"></i> Motion</span><span><i class="dot" style="background:var(--idle)"></i> No motion, grace period</span><span><i class="dot" style="background:var(--bad)"></i> Ghost</span></div>
+  </section>
+  <section class="p"><h2 id="selName">Current draw</h2>
+   <div class="row2"><svg id="gauge" viewBox="0 0 150 130"></svg><svg id="line" viewBox="0 0 360 130"></svg></div>
+  </section>
+  <section class="p"><h2>Department savings leaderboard <small>efficiency = energy used while occupied</small></h2><div id="lb"></div></section>
+ </div>
+</main>
+<script>
+const $=id=>document.getElementById(id),V=n=>getComputedStyle(document.documentElement).getPropertyValue(n);
+let S=null,sel=null;
+const col=r=>!r.online&&!r.lastSeen?'#2a3441':r.ghost?'#f87171':r.motion?'#4ade80':r.current>S.config.threshold?'#fbbf24':'#2a3441';
+const ago=t=>{const s=Math.round((Date.now()-t)/1000);return s<60?s+'s ago':Math.round(s/60)+'m ago'};
+function draw(s){
+ S=s; sel=sel||s.rooms.find(r=>r.online)?.id||s.rooms[0].id;
+ $('mode').textContent=s.config.demo?'Demo mode: simulated rooms + live ESP32':'Live sensors';
+ $('plan').innerHTML=s.rooms.map(r=>`<g onclick="pick('${r.id}')"><rect class="room ${r.id==sel?'sel':''}" x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="6" fill="${col(r)}" fill-opacity=".28"/><rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="6" fill="none" stroke="${col(r)}" stroke-opacity=".7"/>
+  <text class="rn" x="${r.x+10}" y="${r.y+20}">${r.name}</text><text x="${r.x+10}" y="${r.y+36}">${r.dept}</text>
+  <text class="rn" x="${r.x+10}" y="${r.y+r.h-12}" style="font-size:16px">${r.power.toFixed(0)} W</text>
+  <text x="${r.x+r.w-10}" y="${r.y+r.h-12}" text-anchor="end">${r.ghost?'GHOST LOAD':r.motion?'Occupied':'Empty'}</text></g>`).join('');
+ const on=s.rooms.reduce((a,r)=>a+r.power,0);
+ $('tLoad').textContent=(on>=1000?(on/1000).toFixed(2)+' kW':on.toFixed(0)+' W');
+ $('tGhost').textContent=s.rooms.filter(r=>r.ghost).length;
+ const w=s.rooms.reduce((a,r)=>a+r.ghostWh,0);$('tWaste').textContent=w>=1000?(w/1000).toFixed(2)+' kWh':w.toFixed(1)+' Wh';
+ $('tOnline').textContent=s.rooms.filter(r=>r.online).length+' / '+s.rooms.length;
+ $('tabs').innerHTML=s.rooms.map(r=>`<button class="tab ${r.id==sel?'sel':''}" onclick="pick('${r.id}')"><i class="dot" style="background:${col(r)}"></i>${r.name}</button>`).join('');
+ const r=s.rooms.find(x=>x.id==sel),h=r.history;
+ // bars
+ const mx=Math.max(1,...h.map(p=>p.c)),bw=520/60;
+ $('bars').innerHTML=h.map((p,i)=>{const bh=Math.max(2,p.c/mx*110),c=p.g?'#f87171':p.m?'#4ade80':p.c>s.config.threshold?'#fbbf24':'#2a3441';
+  return `<rect x="${i*bw+1}" y="${120-bh}" width="${bw-2}" height="${bh}" rx="2" fill="${c}"/>`}).join('')+`<text x="0" y="128">last ${h.length}s</text><text x="520" y="12" text-anchor="end">max ${mx.toFixed(2)} A</text>`;
+ // gauge
+ const a=Math.min(r.current/Math.max(mx,1),1),C=2*Math.PI*52;
+ $('gauge').innerHTML=`<circle cx="75" cy="62" r="52" fill="none" stroke="#2a3441" stroke-width="9"/><circle cx="75" cy="62" r="52" fill="none" stroke="${col(r)}" stroke-width="9" stroke-linecap="round" stroke-dasharray="${C*a} ${C}" transform="rotate(-90 75 62)"/>
+  <text x="75" y="62" text-anchor="middle" style="fill:#e6edf3;font-size:22px;font-weight:700">${r.current.toFixed(2)}</text><text x="75" y="80" text-anchor="middle">amps</text><text x="75" y="125" text-anchor="middle">${r.power.toFixed(0)} W @ ${s.config.volt} V</text>`;
+ $('selName').textContent=r.name+' current draw';
+ // line
+ const pts=h.map((p,i)=>`${i*360/59},${115-p.c/mx*100}`).join(' '),ty=115-s.config.threshold/mx*100;
+ $('line').innerHTML=`<line x1="0" x2="360" y1="${ty}" y2="${ty}" stroke="#f87171" stroke-dasharray="4 4" opacity=".6"/><text x="360" y="${ty-4}" text-anchor="end">ghost threshold ${s.config.threshold} A</text><polyline points="${pts}" fill="none" stroke="#4ade80" stroke-width="2"/>`;
+ $('alerts').innerHTML=s.alerts.length?s.alerts.map(a=>`<li>${a.msg}<time>${ago(a.t)}</time></li>`).join(''):'<li>No alerts yet. Turn the fan on and leave the PIR still for '+s.config.delay+' s.</li>';
+ $('lb').innerHTML=s.leaderboard.map((d,i)=>`<div class="lb"><b>${i+1}</b><span>${d.dept}</span><span class="pill">${d.efficiency.toFixed(0)}%</span><span style="text-align:right;color:var(--mut)">${(d.wastedKwh*1000).toFixed(1)} Wh lost</span><div class="bar"><i style="width:${d.efficiency}%"></i></div></div>`).join('');
+}
+function pick(id){sel=id;if(S)draw(S)}
+fetch('/api/state').then(r=>r.json()).then(draw);
+const es=new EventSource('/api/stream');es.onmessage=e=>draw(JSON.parse(e.data));
+</script></body></html>
